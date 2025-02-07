@@ -1,24 +1,21 @@
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
-import { BufferGeometry } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { useSTLStore } from "../store/useSTLStore";
 
-interface ThreeDViewerProps {
-  stlFile?: string;
-}
-
-const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ stlFile }) => {
+const ThreeDViewer: React.FC = () => {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const { stlFile } = useSTLStore(); // Zustand에서 상태 가져오기
 
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // Set up the scene
+    // Scene 설정
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xeeeeee);
 
-    // Set up the camera
+    // Camera 설정
     const camera = new THREE.PerspectiveCamera(
       75,
       mountRef.current.clientWidth / mountRef.current.clientHeight,
@@ -27,7 +24,7 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ stlFile }) => {
     );
     camera.position.z = 5;
 
-    // Set up the renderer
+    // Renderer 설정
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(
       mountRef.current.clientWidth,
@@ -35,34 +32,37 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ stlFile }) => {
     );
     mountRef.current.appendChild(renderer.domElement);
 
-    // Add OrbitControls for user interaction
+    // OrbitControls 추가
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // Load STL file or add a default cube
+    // STL 모델 로드
+    const loader = new STLLoader();
+    let mesh: THREE.Mesh | null = null;
+
     if (stlFile) {
-      const loader = new STLLoader();
-      loader.load(stlFile, (geometry: BufferGeometry) => {
+      loader.load(stlFile, (geometry: THREE.BufferGeometry) => {
         const material = new THREE.MeshStandardMaterial({ color: 0x555555 });
-        const mesh = new THREE.Mesh(geometry, material);
+        mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
       });
     } else {
+      // STL이 없을 때 기본 큐브 표시
       const geometry = new THREE.BoxGeometry();
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-      const cube = new THREE.Mesh(geometry, material);
-      scene.add(cube);
+      mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
     }
 
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(0x404040, 2); // Soft white light
+    // 조명 추가
+    const ambientLight = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(5, 10, 7.5);
     scene.add(directionalLight);
 
-    // Animation loop
+    // 애니메이션 루프
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
@@ -71,14 +71,19 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ stlFile }) => {
 
     animate();
 
-    // Cleanup on component unmount
+    // Cleanup (언마운트 시 메모리 정리)
     return () => {
+      if (mesh) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      }
       if (mountRef.current) {
         mountRef.current.removeChild(renderer.domElement);
       }
       controls.dispose();
     };
-  }, [stlFile]);
+  }, [stlFile]); // stlFile이 변경될 때마다 실행됨
 
   return <div ref={mountRef} style={{ width: "100%", height: "400px" }} />;
 };
